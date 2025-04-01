@@ -1,12 +1,19 @@
 [package]
 name = "allvu"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 
+[[bin]]
+name = "AllVu_Client"
+path = "src/client/main.rs"
+
+[[bin]]
+name = "AllVu_Server"
+path = "src/server/main.rs"
+
 [dependencies]
-aggligator = "0.9.5"
-aggligator-transport-tcp = "0.2.0"
 anyhow = "1.0.97"
+rand = "0.9.0"
 serde = { version = "1.0.219", features = ["derive"] }
 text_io = "0.1.13"
 tokio = { version = "1.44.1", features = ["full"] }

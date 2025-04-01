@@ -2,7 +2,7 @@ use std::{io::Cursor, process::Stdio};
 use anyhow::{anyhow, Result};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, process::{Child, Command}};
 
-use crate::CHUNK_SIZE;
+const CHUNK_SIZE: usize = 500;
 
 pub struct FFmpeg {
     pub args: Vec<String>,
