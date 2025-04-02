@@ -1,4 +1,4 @@
-use std::{io::Cursor, process::Stdio};
+use std::{io::Cursor, process::{ExitStatus, Stdio}};
 use anyhow::{anyhow, Result};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, process::{Child, Command}};
 
@@ -68,5 +68,14 @@ impl FFmpeg {
         stdin.write_all_buf(&mut cursor).await?;
 
         return Ok(());
+    }
+
+    pub async fn wait_until_end(&mut self) -> anyhow::Result<ExitStatus> {
+        let Some(process) = &mut self.process else {
+            return Err(anyhow!("No process"));
+        };
+
+        let exit_status = process.wait().await?;
+        Ok(exit_status)
     }
 }
