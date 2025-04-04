@@ -1,0 +1,10 @@
+[Unit]
+Description=AllVu streaming service (minimal)
+After=network.target speedify.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+ExecStart=/usr/local/bin/AllVu_ClientMinimal
+Environment="ALLVU_CONFIG_PATH=/etc/allvu/minimal.toml"
