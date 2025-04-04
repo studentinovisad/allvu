@@ -1,0 +1,3 @@
+rtmp_server = "rmtp.example.org/inject/1234"
+camera_pat = "Cam Link"
+audio_pat = "Elgato_Cam_Link"
