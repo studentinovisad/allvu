@@ -93,9 +93,12 @@ async fn get_input_source(pat: &str) -> anyhow::Result<String> {
 }
 
 async fn get_config() -> anyhow::Result<Config> {
-    let config_path = PathBuf::from("allvu_client_minimal.toml");
+    let config_path = env::var("ALLVU_CONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("allvu_client_minimal.toml"));
+
     if !config_path.exists() {
-        return Err(anyhow!("Config file not found"));
+        return Err(anyhow!("Config file not found at {:?}", config_path));
     }
 
     let contents = read_to_string(config_path).await?;
