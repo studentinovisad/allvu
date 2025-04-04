@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::from_utf8, time::Duration};
+use std::{env, path::PathBuf, str::from_utf8, time::Duration};
 use anyhow::anyhow;
 use ffmpeg::FFmpeg;
 use serde::Deserialize;
