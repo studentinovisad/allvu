@@ -139,12 +139,19 @@ async fn main() -> anyhow::Result<()> {
         ffmpeg_stream.args = vec![
             "-vaapi_device".into(), renderer_path,
             "-f".into(), "video4linux2".into(),
+            "-input_format".into(), "yuyv422".into(),
+            "-framerate".into(), "50".into(),
+            "-video_size".into(), "1920x1080".into(),
             "-i".into(), camera_name,
             "-f".into(), "pulse".into(),
             "-i".into(), input_name,
             "-vf".into(), "format=nv12,hwupload".into(),
             "-c:v".into(), "h264_vaapi".into(),
             "-c:a".into(), "aac".into(),
+            "-crf".into(), "23".into(),
+            "-maxrate".into(), "10M".into(),
+            "-bufsize".into(), "2M".into(),
+            "-preset".into(), "fast".into(),
             "-f".into(), "flv".into(),
             config.rtmp_server.clone()
         ];
@@ -156,6 +163,4 @@ async fn main() -> anyhow::Result<()> {
         }
         ffmpeg_stream.wait_until_end().await?;
     }
-
-    Ok(())
 }
