@@ -1,5 +1,5 @@
 use std::sync::{atomic::AtomicU32, Arc};
-
+use anyhow::anyhow;
 use rand::distr::{Alphanumeric, SampleString};
 use tokio::{spawn, sync::{mpsc::{self, Sender, Receiver}, Mutex}};
 
@@ -69,6 +69,9 @@ impl Session {
     }
 
     pub async fn send(&self, packet: ConnectionPacket) -> anyhow::Result<()> {
+        if self.connections.len() == 0 {
+            return Err(anyhow!("There must be a connection inside of this session to send data"));
+        }
         let mut lock = self.connections[0].lock().await;
         lock.write(packet).await?;
         Ok(())

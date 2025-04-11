@@ -1,6 +1,7 @@
 use std::{env, path::PathBuf, str::from_utf8, time::Duration};
 use anyhow::anyhow;
-use ffmpeg::FFmpeg;
+use camlink_fixer::fix_camlink;
+use ffmpeg::{AudioEncoder, FFmpeg, Output, VideoEncoder};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::{fs::read_to_string, process::Command, time::sleep};
@@ -8,20 +9,8 @@ use tokio::{fs::read_to_string, process::Command, time::sleep};
 #[path ="../ffmpeg.rs"]
 mod ffmpeg;
 
-async fn get_renderer() -> anyhow::Result<String> {
-    let renderer_path = PathBuf::from("/dev/dri/");
-    for dir_entry_result in renderer_path.read_dir()? {
-        let Ok(dir_entry) = dir_entry_result else {
-            continue;
-        };
-        let dev_name = String::from(dir_entry.file_name().to_str().unwrap_or(""));
-        if dev_name.contains("render") {
-            return Ok(String::from(dir_entry.path().to_str().unwrap()));
-        }
-    }
-
-    Err(anyhow!("Renderer not found"))
-}
+#[path ="../camlink_fixer.rs"]
+mod camlink_fixer;
 
 async fn get_camera(pat: &str) -> anyhow::Result<String> {
     let v4l2_path = PathBuf::from("/sys/class/video4linux/");
@@ -112,6 +101,14 @@ async fn main() -> anyhow::Result<()> {
     let config = get_config().await?;
 
     loop {
+        // CamLink fix - we're using them for camera input
+        println!("Fixing camlink...");
+        if let Err(e) = fix_camlink().await {
+            eprintln!("Camlink fixing error {:?}", e);
+        } else {
+            println!("Camlink successfully fixed");
+        } 
+
         let camera_name_result = get_camera(&config.camera_pat).await;
         let Ok(camera_name) = camera_name_result else {
             eprintln!("Couldn't get camera name {:?}, retrying...", camera_name_result.unwrap_err());
@@ -128,39 +125,33 @@ async fn main() -> anyhow::Result<()> {
 
         println!("PulseAudio input: {input_name}");
 
-        let Ok(renderer_path) = get_renderer().await else {
-            eprintln!("Couldn't get renderer, retrying...");
-            sleep(Duration::from_secs(3)).await;
-            continue;
-        };
-        println!("Renderer {renderer_path}");
-
         let mut ffmpeg_stream = FFmpeg::new();
-        ffmpeg_stream.args = vec![
-            "-vaapi_device".into(), renderer_path,
-            "-f".into(), "video4linux2".into(),
-            "-input_format".into(), "yuyv422".into(),
-            "-framerate".into(), "50".into(),
-            "-video_size".into(), "1920x1080".into(),
-            "-i".into(), camera_name,
-            "-f".into(), "pulse".into(),
-            "-i".into(), input_name,
-            "-vf".into(), "format=nv12,hwupload".into(),
-            "-c:v".into(), "h264_vaapi".into(),
-            "-c:a".into(), "aac".into(),
-            "-crf".into(), "23".into(),
-            "-maxrate".into(), "10M".into(),
-            "-bufsize".into(), "2M".into(),
-            "-preset".into(), "fast".into(),
-            "-f".into(), "flv".into(),
-            config.rtmp_server.clone()
+        ffmpeg_stream.video_encoder = VideoEncoder::VAAPIH264;
+        ffmpeg_stream.audio_encoder = AudioEncoder::AAC;
+        ffmpeg_stream.output = Some(Output {
+            path: config.rtmp_server.clone(),
+            output_type: ffmpeg::OutputType::FLV
+        });
+
+        let ffmpeg_args = vec![
+            "-f", "video4linux2",
+            "-input_format", "yuyv422",
+            "-framerate", "50",
+            "-video_size", "1920x1080",
+            "-i", &camera_name,
+            "-f", "pulse",
+            "-i", &input_name,
+            "-maxrate", "5M",
+            "-bufsize", "1M",
+            "-preset", "fast",
         ];
 
-        if let Err(e) = ffmpeg_stream.start() {
+        if let Err(e) = ffmpeg_stream.start(ffmpeg_args) {
             eprintln!("Couldn't start FFmpeg {e}, retrying...");
             sleep(Duration::from_secs(3)).await;
             continue;
         }
+        
         ffmpeg_stream.wait_until_end().await?;
     }
 }

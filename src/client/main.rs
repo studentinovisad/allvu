@@ -1,9 +1,11 @@
-use std::{fs::read_dir, net::{IpAddr, Ipv4Addr, SocketAddr}, path::PathBuf, str::FromStr, time::Duration};
+use std::{fs::read_dir, net::SocketAddr, path::PathBuf};
 use anyhow::anyhow;
 use clisession::{introduce_connection, ClientSession};
+use ffmpeg::{AudioEncoder, Output, VideoEncoder};
+use hickory_resolver::Resolver;
 use serde::Deserialize;
-use tokio::{fs::read_to_string, net::{TcpSocket, TcpStream}, time::sleep};
-use crate::{connection::{Connection, ConnectionPacket, PacketType}, ffmpeg::FFmpeg};
+use tokio::{fs::read_to_string, net::TcpSocket};
+use crate::{connection::{Connection, ConnectionPacket}, ffmpeg::FFmpeg};
 
 #[path ="../connection.rs"]
 mod connection;
@@ -63,38 +65,12 @@ async fn main() -> anyhow::Result<()> {
     let config = get_config().await?;
     let server_address_str = config.server;
     let camera_path = config.camera;
-    let server_address = SocketAddr::new(IpAddr::from_str(server_address_str.as_str()).unwrap(), ALLVU_PORT);//format!("{server_address}:{ALLVU_PORT}");
 
-    // Check if server is an AllVu server
-    let initial_stream = TcpStream::connect(server_address).await?;
-
-    let mut connection = Connection::new(initial_stream);
-    introduce_connection(&mut connection).await?;
-
-    println!("Server ready :)");
+    let resolver = Resolver::builder_tokio()?.build();
+    let addr = resolver.lookup_ip(server_address_str.as_str()).await?.iter().next().unwrap();
+    let server_address = SocketAddr::new(addr, ALLVU_PORT);
 
     let mut session = ClientSession::new();
-
-    /*
-
-    let mut camera_ffmpeg = FFmpeg::new();
-    camera_ffmpeg.args = vec![
-        "-i".into(), camera_path,
-        "-c".into(), "h264_qsv".into(),
-        "-f".into(), "h264".into(),
-        "-".into(),
-    ];
-    //camera_ffmpeg.start().expect("Failed to start FFmpeg");
-    println!("Started FFmpeg"); */
-
-    /* 
-
-    println!("Sending token request...");
-    //initial_stream.write_u8(1).await?;
-    println!("Retrieving token...");
-    let mut token = String::new();
-    initial_stream.read_to_string(&mut token).await?;
-    println!("Token retrieved!");*/
     
     println!("Checking interfaces");
     let interfaces = get_network_interfaces().await?;
@@ -110,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
         };
         let Ok(tcp_stream) = tcp_socket.connect(server_address).await else {
             eprintln!("Couldn't connect to server from {interface_name}");
+            eprintln!("{server_address}");
             continue;
         };
         println!("Connection created - {interface_name}");
@@ -119,13 +96,16 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut camera_ffmpeg = FFmpeg::new();
-    camera_ffmpeg.args = vec![
-        "-i".into(), camera_path,
-        "-c".into(), "libx264".into(),
-        "-f".into(), "h264".into(),
-        "-".into(),
-    ];
-    camera_ffmpeg.start()?;
+    camera_ffmpeg.video_encoder = VideoEncoder::VAAPIH264;
+    camera_ffmpeg.audio_encoder = AudioEncoder::AAC;
+    camera_ffmpeg.output = Some(Output {
+        path: "-".into(),
+        output_type: ffmpeg::OutputType::FLV
+    });
+
+    camera_ffmpeg.start(vec![
+        "-i", &camera_path
+    ])?;
 
     loop {
         println!("reading ffmpeg");
@@ -145,6 +125,4 @@ async fn main() -> anyhow::Result<()> {
         }
         println!("written");
     }
-
-    Ok(())
 }
