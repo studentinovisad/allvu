@@ -10,5 +10,5 @@ target/
 *.pdb
 
 # AllVu config files
-allvu_client.toml
+allvu_client*.toml
 allvu_server.toml
