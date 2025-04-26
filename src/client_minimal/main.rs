@@ -21,7 +21,8 @@ struct Config {
     camera_pat: String,
     audio_pat: String,
     min_rate: Option<usize>,
-    max_rate: Option<usize>
+    max_rate: Option<usize>,
+    avg_rate: Option<usize>
 }
 
 async fn get_config() -> anyhow::Result<Config> {
@@ -77,7 +78,9 @@ async fn main() -> anyhow::Result<()> {
         });
 
         let min_rate = format!("{}K", config.min_rate.unwrap_or(500));
-        let max_rate = format!("{}K", config.max_rate.unwrap_or(4000));
+        let max_rate_int = config.max_rate.unwrap_or(4000);
+        let max_rate = format!("{}K", max_rate_int);
+        let avg_rate = format!("{}K", config.avg_rate.unwrap_or(max_rate_int));
 
         let ffmpeg_args = vec![
             "-f", "video4linux2",
@@ -87,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
             "-i", &camera_name,
             "-f", "pulse",
             "-i", &input_name,
-            "-b:v", max_rate.as_str(),
+            "-b:v", avg_rate.as_str(),
             "-minrate:v", min_rate.as_str(),
             "-maxrate:v", max_rate.as_str(),
             "-bufsize:v", "10M",
