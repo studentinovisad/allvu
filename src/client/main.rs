@@ -1,8 +1,7 @@
-use std::{fs::read_dir, net::SocketAddr, path::PathBuf};
+use std::{fs::read_dir, net::{SocketAddr, ToSocketAddrs}, path::PathBuf};
 use anyhow::anyhow;
 use clisession::{introduce_connection, ClientSession};
 use ffmpeg::{AudioEncoder, Output, VideoEncoder};
-use hickory_resolver::Resolver;
 use serde::Deserialize;
 use tokio::{fs::read_to_string, net::TcpSocket};
 use crate::{connection::{Connection, ConnectionPacket}, ffmpeg::FFmpeg};
@@ -63,12 +62,18 @@ async fn main() -> anyhow::Result<()> {
     println!("Client mode");
 
     let config = get_config().await?;
-    let server_address_str = config.server;
     let camera_path = config.camera;
 
-    let resolver = Resolver::builder_tokio()?.build();
-    let addr = resolver.lookup_ip(server_address_str.as_str()).await?.iter().next().unwrap();
-    let server_address = SocketAddr::new(addr, ALLVU_PORT);
+    let server_address_str = format!("{}:1312", config.server);
+    let mut server_addresses = server_address_str.to_socket_addrs().expect("Couldnt resolve server address");
+
+    for addr in server_addresses.clone() {
+        println!("{addr}");
+    }
+    
+    let Some(server_address) = server_addresses.next() else {
+        panic!("Server has no addresses");
+    };
 
     let mut session = ClientSession::new();
     
