@@ -5,8 +5,23 @@ use tokio::{io::{AsyncReadExt, AsyncWriteExt}, process::{Child, Command}, select
 const CHUNK_SIZE: usize = 500;
 
 pub enum OutputType {
+    // Used for RTMP
     FLV,
-    MP4
+    MP4,
+    /// Used for SRT, MPEG Transport Stream https://en.wikipedia.org/wiki/MPEG_transport_stream
+    MPEGTS 
+}
+
+#[derive(PartialEq)]
+pub enum InputType {
+    V4L2,
+    PulseAudio,
+    AutoDetect
+}
+
+pub struct Input {
+    pub path: String,
+    pub input_type: InputType
 }
 
 pub struct Output {
@@ -17,6 +32,7 @@ pub struct Output {
 pub enum VideoEncoder {
     SoftwareH264,
     VAAPIH264,
+    VAAPIHEVC,
     Copy
 }
 
@@ -27,6 +43,7 @@ pub enum AudioEncoder {
 
 pub struct FFmpeg {
     pub output: Option<Output>,
+    pub inputs: Vec<Input>,
     pub video_encoder: VideoEncoder,
     pub audio_encoder: AudioEncoder,
     process: Option<Child>
@@ -51,6 +68,7 @@ impl FFmpeg {
     pub fn new() -> Self {
         Self {
             process: None,
+            inputs: vec![],
             output: None,
             video_encoder: VideoEncoder::VAAPIH264,
             audio_encoder: AudioEncoder::AAC,
@@ -65,6 +83,25 @@ impl FFmpeg {
             "error"
         ];
 
+        // Go through all inputs
+        for input in &self.inputs {
+            if input.input_type != InputType::AutoDetect {
+                combined_args.push("-f");
+                match input.input_type {
+                    InputType::V4L2 => {
+                        combined_args.push("video4linux2");
+                    }
+                    InputType::PulseAudio => {
+                        combined_args.push("pulse");
+                    }
+                    _ => {}
+                }
+            }
+            
+            combined_args.push("-i");
+            combined_args.push(&input.path);
+        }
+
         // Program defined args
         combined_args.append(&mut args.clone());
 
@@ -77,6 +114,14 @@ impl FFmpeg {
                     "-vaapi_device", &renderer_device,
                     "-vf", "format=nv12,hwupload",
                     "-c:v", "h264_vaapi",
+                ]);
+            }
+            VideoEncoder::VAAPIHEVC => {
+                renderer_device = get_vaapi_renderer()?;
+                combined_args.append(&mut vec![
+                    "-vaapi_device", &renderer_device,
+                    "-vf", "format=nv12,hwupload",
+                    "-c:v", "h265_vaapi",
                 ]);
             }
             VideoEncoder::SoftwareH264 => {
@@ -117,6 +162,9 @@ impl FFmpeg {
             }
             OutputType::MP4 => {
                 combined_args.push("mp4");
+            }
+            OutputType::MPEGTS => {
+                combined_args.push("mpegts");
             }
         }
 
